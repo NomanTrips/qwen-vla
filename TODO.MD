@@ -29,37 +29,53 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 
 ## 1. Data Pipeline
 
-### 1.1 Recording Format Specification
-- [ ] Define recording schema (JSON/protobuf)
-  - Timestamp
-  - Screenshot (PNG/JPEG path or raw bytes)
-  - Mouse position (x, y)
-  - Mouse buttons (left, right, middle)
-  - Keyboard state (pressed keys)
-  - Game state metadata (optional: position, health, etc.)
-- [ ] Define episode structure (start/end markers, task description)
-- [ ] Document action space dimensions and ranges
+### 1.1 Raw Capture Format (Observed)
+- [ ] Document episode directory layout:
+  - `video.mp4` (screen recording at ~10 fps, 384×384 canvas)
+  - `events.jsonl` (JSONL stream of input events with timestamps)
+  - `frame_ts.bin` (int64 QPC timestamps per video frame)
+  - `meta.json` (recording metadata: fps, canvas size, qpc_freq, offset_ms)
+- [ ] Capture event schema from `events.jsonl`:
+  - Common fields: `ts` (QPC timestamp), `kind`
+  - Mouse events: `mousemove` (`x`, `y`), `mouseclick` (`x`, `y`, `buttons` optional)
+  - Keyboard events: `keydown`/`keyup` (`vk` virtual key code)
+- [ ] Specify timestamp alignment:
+  - Convert QPC → ms using `qpc_freq` from `meta.json`
+  - Apply `offset_ms` before aligning to frame timestamps
+  - Note that `frame_ts.bin` may repeat timestamps (duplicate frames)
+- [ ] Define action space based on captured data:
+  - Mouse position in pixel coordinates (0..canvas_w-1, 0..canvas_h-1)
+  - Mouse buttons as bitmask or separate binary channels
+  - Keyboard as pressed-key set derived from keydown/keyup
 
-### 1.2 Dataset Converter
-- [ ] Write script to convert raw recordings to training format
-- [ ] Implement action normalization (scale to [-1, 1] or [0, 1])
-- [ ] Implement action chunking (group into sequences of N actions)
-- [ ] Handle variable-length episodes (padding/truncation)
-- [ ] Generate train/val/test splits
-- [ ] Save in HuggingFace datasets format or custom format
+### 1.2 Dataset Conversion (Raw → Training)
+- [ ] Parse `frame_ts.bin` as little-endian int64 timestamps, map to frame indices.
+- [ ] Decode `video.mp4` and build a frame index → image mapping.
+- [ ] Align events to frames:
+  - For each frame interval `[ts_i, ts_{i+1})`, collect all events.
+  - Derive per-frame action labels (mouse position, button changes, key state).
+- [ ] Convert event streams into model-friendly actions:
+  - Mouse: normalize position/delta to [-1, 1] relative to canvas size.
+  - Buttons: map to discrete channels (left/right/middle) or bitmask.
+  - Keyboard: map `vk` to fixed vocabulary; maintain pressed-state vector.
+- [ ] Optionally resample to fixed fps or drop duplicate frame timestamps.
+- [ ] Emit per-episode training samples:
+  - Frame triplets (t, t-2, t-4) + action for frame t (or chunk).
+  - Persist aligned `frame_idx`, `timestamp_ms`, and raw event list for audits.
+- [ ] Generate train/val/test splits and save as HF dataset or shards.
 
 ### 1.3 PyTorch Dataset Class
-- [ ] Create `MiniworldVLADataset` class
+- [ ] Create `MiniworldVLADataset` class that reads processed shards.
 - [ ] Implement `__getitem__` returning:
   - `images`: Tensor [num_frames, C, H, W] (e.g., [3, 3, 384, 384])
-  - `text_instruction`: str (task description)
+  - `text_instruction`: str (task description, if available)
   - `states`: Tensor [state_dim] (optional: game state)
   - `action_chunk`: Tensor [chunk_size, action_dim]
 - [ ] Implement temporal frame sampling:
   - [ ] Support configurable `num_frames` (default: 3)
   - [ ] Support configurable `frame_skip` (default: 2, meaning frames t, t-2, t-4)
   - [ ] Handle episode boundaries (pad with first frame if needed)
-  - [ ] Store frame indices for debugging
+  - [ ] Store frame indices and timestamps for debugging
 - [ ] Implement image preprocessing (resize to 384×384, normalize)
 - [ ] Implement data augmentation (optional: color jitter, crops—apply consistently across temporal frames)
 - [ ] Add caching for faster loading
