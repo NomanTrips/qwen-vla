@@ -1,0 +1,10 @@
+{
+  "bitrate": 6000,
+  "canvas_h": 384,
+  "canvas_w": 384,
+  "codec": "h264_nvenc",
+  "fps": 10,
+  "offset_ms": 0,
+  "qpc_freq": 10000000,
+  "timestamps": "frame_ts.bin"
+}
