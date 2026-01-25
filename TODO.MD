@@ -113,7 +113,7 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 - [ ] Verify Qwen handles multiple images correctly (native multi-image support)
 
 ### 2.2 Temporal Feature Handling
-- [ ] Implement `TemporalFeatureExtractor` wrapper:
+- [x] Implement `TemporalFeatureExtractor` wrapper:
   ```python
   class TemporalFeatureExtractor:
       def __init__(self, qwen_vl, target_layer=14):
@@ -125,48 +125,48 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
           # Returns: features with temporal dimension preserved
           # Shape: [batch, num_frames * seq_len, hidden_dim]
   ```
-- [ ] Add temporal position embeddings (optional, to distinguish frame order)
+- [x] Add temporal position embeddings (optional, to distinguish frame order)
 - [ ] Test that gradients don't flow back to frozen VLM
 - [ ] Benchmark memory usage with 1, 2, 3 frames
 
 ### 2.2 Projector Modules
-- [ ] Implement `StateProjector` (Linear: state_dim → hidden_dim)
-- [ ] Implement `ActionProjector` (Linear: action_dim → expert_hidden_dim)
-- [ ] Implement `FeatureProjector` (Linear: vlm_hidden_dim → expert_hidden_dim)
-- [ ] Add LayerNorm where appropriate
+- [x] Implement `StateProjector` (Linear: state_dim → hidden_dim)
+- [x] Implement `ActionProjector` (Linear: action_dim → expert_hidden_dim)
+- [x] Implement `FeatureProjector` (Linear: vlm_hidden_dim → expert_hidden_dim)
+- [x] Add LayerNorm where appropriate
 - [ ] Test projector shapes with dummy inputs
 
 ### 2.3 Flow Matching Action Expert
-- [ ] Implement `FlowMatchingExpert` transformer
+- [x] Implement `FlowMatchingExpert` transformer
   - Config: num_layers, hidden_dim, num_heads, mlp_ratio
-- [ ] Implement timestep embedding (sinusoidal or learned)
-- [ ] Implement interleaved attention blocks:
-  - [ ] Cross-attention layer (queries=actions, keys/values=VLM features)
-  - [ ] Causal self-attention layer (actions attend to past actions)
-- [ ] Implement feed-forward blocks (MLP with GELU)
-- [ ] Implement final projection to action_dim
-- [ ] Add positional embeddings for action sequence
+- [x] Implement timestep embedding (sinusoidal or learned)
+- [x] Implement interleaved attention blocks:
+  - [x] Cross-attention layer (queries=actions, keys/values=VLM features)
+  - [x] Causal self-attention layer (actions attend to past actions)
+- [x] Implement feed-forward blocks (MLP with GELU)
+- [x] Implement final projection to action_dim
+- [x] Add positional embeddings for action sequence
 - [ ] Test forward pass: (noisy_actions, vlm_features, timestep) → velocity
 
 ### 2.4 Full QwenVLA Model
-- [ ] Create `QwenVLA` nn.Module combining all components
-- [ ] Implement forward method for training:
+- [x] Create `QwenVLA` nn.Module combining all components
+- [x] Implement forward method for training:
   ```python
   def forward(self, images, text, states, actions, timesteps):
       # Returns predicted velocity for flow matching loss
   ```
-- [ ] Implement `sample` method for inference:
+- [x] Implement `sample` method for inference:
   ```python
   def sample(self, images, text, states, num_steps=10):
       # Returns action chunk via ODE integration
   ```
-- [ ] Add config dataclass for all hyperparameters
+- [x] Add config dataclass for all hyperparameters
 - [ ] Test full model forward pass
 - [ ] Print model parameter counts (frozen vs trainable)
 
 ### 2.5 Visual Token Handling (Optional Optimization)
-- [ ] Implement `TokenPooler` module (average pool or learned)
-- [ ] Add flag to enable/disable pooling
+- [x] Implement `TokenPooler` module (average pool or learned)
+- [x] Add flag to enable/disable pooling
 - [ ] Benchmark inference time with/without pooling
 - [ ] Decide on final approach based on latency
 
