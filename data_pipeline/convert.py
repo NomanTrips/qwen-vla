@@ -70,17 +70,32 @@ def qpc_to_ms(ts: np.ndarray, qpc_freq: float, offset_ms: float) -> np.ndarray:
     return ts_ms
 
 
+def _escape_control_chars(s: str) -> str:
+    """Escape unescaped control characters in JSON strings."""
+    import re
+    # Escape control characters that aren't already escaped
+    # Match control chars (0x00-0x1F) except those following a backslash
+    def replace_ctrl(m: re.Match) -> str:
+        char = m.group(0)
+        return f"\\u{ord(char):04x}"
+    return re.sub(r'[\x00-\x1f]', replace_ctrl, s)
+
+
 def load_events(path: str, qpc_freq: float, offset_ms: float) -> List[dict]:
     events: List[dict] = []
-    with open(path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            event = json.loads(line)
-            ts_ms = qpc_to_ms(np.array([event["ts"]], dtype=np.int64), qpc_freq, offset_ms)[0]
-            event["timestamp_ms"] = float(ts_ms)
-            events.append(event)
+    # Read in binary mode to avoid Python interpreting embedded \r as newlines
+    with open(path, "rb") as handle:
+        content = handle.read()
+    for raw_line in content.split(b"\n"):
+        line = raw_line.decode("utf-8").strip()
+        if not line:
+            continue
+        # Escape any raw control characters in the JSON line
+        line = _escape_control_chars(line)
+        event = json.loads(line)
+        ts_ms = qpc_to_ms(np.array([event["ts"]], dtype=np.int64), qpc_freq, offset_ms)[0]
+        event["timestamp_ms"] = float(ts_ms)
+        events.append(event)
     return events
 
 
