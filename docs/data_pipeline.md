@@ -81,3 +81,22 @@ To align events to frames:
 - Mouse buttons: derived from `buttons` bitmask or button-specific channels.
 - Keyboard state: maintain a pressed-key set using `keydown` and `keyup`.
 - Text input: retain `text` as raw input if needed for debugging or instruction reconstruction.
+
+## Conversion Output (Processed Dataset)
+
+The converter emits one directory per episode with:
+
+- `frames/`: JPEG frames named `frame_000000.jpg`.
+- `actions.jsonl`: Line-delimited per-frame action records.
+  - First line is a header with `key_vocab` (sorted list of observed `vk` codes).
+  - Each subsequent line stores normalized mouse position/delta, button state, key state vector, and the raw events seen in that frame interval.
+- `meta.json`: Summary metadata (canvas size, FPS, key vocab, frame counts).
+
+To run the converter:
+
+```bash
+python scripts/convert_recordings.py \\
+  --input raw_screen_capture \\
+  --output data/processed \\
+  --drop-duplicate-frames
+```
