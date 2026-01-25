@@ -30,20 +30,20 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 ## 1. Data Pipeline
 
 ### 1.1 Raw Capture Format (Observed)
-- [ ] Document episode directory layout:
+- [x] Document episode directory layout:
   - `video.mp4` (screen recording at ~10 fps, 384×384 canvas)
   - `events.jsonl` (JSONL stream of input events with timestamps)
   - `frame_ts.bin` (int64 QPC timestamps per video frame)
   - `meta.json` (recording metadata: fps, canvas size, qpc_freq, offset_ms)
-- [ ] Capture event schema from `events.jsonl`:
+- [x] Capture event schema from `events.jsonl`:
   - Common fields: `ts` (QPC timestamp), `kind`
   - Mouse events: `mousemove` (`x`, `y`), `mouseclick` (`x`, `y`, `buttons` optional)
   - Keyboard events: `keydown`/`keyup` (`vk` virtual key code)
-- [ ] Specify timestamp alignment:
+- [x] Specify timestamp alignment:
   - Convert QPC → ms using `qpc_freq` from `meta.json`
   - Apply `offset_ms` before aligning to frame timestamps
   - Note that `frame_ts.bin` may repeat timestamps (duplicate frames)
-- [ ] Define action space based on captured data:
+- [x] Define action space based on captured data:
   - Mouse position in pixel coordinates (0..canvas_w-1, 0..canvas_h-1)
   - Mouse buttons as bitmask or separate binary channels
   - Keyboard as pressed-key set derived from keydown/keyup
