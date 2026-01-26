@@ -184,7 +184,7 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 ## 3. Training Loop
 
 ### 3.1 Flow Matching Loss
-- [ ] Implement `flow_matching_loss` function
+- [x] Implement `flow_matching_loss` function
   ```python
   def flow_matching_loss(model, images, text, states, actions):
       # Sample timesteps from Beta distribution
@@ -193,21 +193,21 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
       # Target: u = noise - actions
       # Loss: MSE(v, u)
   ```
-- [ ] Add optional loss weighting by timestep
+- [x] Add optional loss weighting by timestep
 - [ ] Test loss computation with dummy data
 
 ### 3.2 Optimizer and Scheduler
-- [ ] Setup AdamW optimizer
+- [x] Setup AdamW optimizer
   - Separate param groups for action expert vs projectors (if different LR)
-- [ ] Implement cosine learning rate schedule with warmup
-- [ ] Add gradient clipping
-- [ ] Add weight decay (exclude biases and LayerNorm)
+- [x] Implement cosine learning rate schedule with warmup
+- [x] Add gradient clipping
+- [x] Add weight decay (exclude biases and LayerNorm)
 
 ### 3.3 Training Script
-- [ ] Parse config from YAML or command line
-- [ ] Initialize model, optimizer, scheduler
-- [ ] Setup wandb/tensorboard logging
-- [ ] Implement training loop:
+- [x] Parse config from YAML or command line
+- [x] Initialize model, optimizer, scheduler
+- [x] Setup wandb/tensorboard logging
+- [x] Implement training loop:
   ```python
   for epoch in range(num_epochs):
       for batch in dataloader:
@@ -217,10 +217,10 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
           scheduler.step()
           log_metrics(loss, lr, ...)
   ```
-- [ ] Add checkpointing (save every N steps + best model)
-- [ ] Add gradient accumulation support
-- [ ] Add mixed precision training (bf16/fp16)
-- [ ] Add resume from checkpoint functionality
+- [x] Add checkpointing (save every N steps + best model)
+- [x] Add gradient accumulation support
+- [x] Add mixed precision training (bf16/fp16)
+- [x] Add resume from checkpoint functionality
 
 ### 3.4 Validation Loop
 - [ ] Implement validation loss computation
