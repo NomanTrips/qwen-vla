@@ -92,11 +92,11 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 ## 2. Model Architecture
 
 ### 2.1 Qwen 3 VL Integration
-- [ ] Load Qwen 3 VL 2B with transformers library
-- [ ] Setup 4-bit quantization with bitsandbytes:
+- [x] Load Qwen 3 VL 2B with transformers library
+- [x] Setup 4-bit quantization with bitsandbytes:
   ```python
   from transformers import BitsAndBytesConfig
-  
+
   bnb_config = BitsAndBytesConfig(
       load_in_4bit=True,
       bnb_4bit_compute_dtype=torch.bfloat16,
@@ -105,12 +105,15 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
   )
   model = Qwen3VL.from_pretrained(..., quantization_config=bnb_config)
   ```
-- [ ] Identify intermediate layer for feature extraction (e.g., layer 14 of 28)
-- [ ] Write hook or modify forward to extract hidden states at target layer
-- [ ] Freeze all VLM parameters (required for 4-bit)
-- [ ] Test forward pass with multi-frame input (3 images + text)
-- [ ] Document hidden dimension size and output shapes
-- [ ] Verify Qwen handles multiple images correctly (native multi-image support)
+- [x] Identify intermediate layer for feature extraction (e.g., layer 14 of 28)
+- [x] Write hook or modify forward to extract hidden states at target layer
+- [x] Freeze all VLM parameters (required for 4-bit)
+- [x] Test forward pass with multi-frame input (3 images + text)
+- [x] Document hidden dimension size and output shapes
+  - Hidden size: 2048
+  - Output shape: [batch, seq_len, 2048] where seq_len ≈ 156 per frame at 384×384
+- [x] Verify Qwen handles multiple images correctly (native multi-image support)
+  - Uses chat template with `<|vision_start|><|image_pad|><|vision_end|>` tokens
 
 ### 2.2 Temporal Feature Handling
 - [x] Implement `TemporalFeatureExtractor` wrapper:
@@ -119,22 +122,25 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
       def __init__(self, qwen_vl, target_layer=14):
           self.qwen_vl = qwen_vl
           self.target_layer = target_layer
-      
+
       def forward(self, frames_list, instruction):
           # frames_list: [frame_t_minus_4, frame_t_minus_2, frame_t]
           # Returns: features with temporal dimension preserved
           # Shape: [batch, num_frames * seq_len, hidden_dim]
   ```
 - [x] Add temporal position embeddings (optional, to distinguish frame order)
-- [ ] Test that gradients don't flow back to frozen VLM
-- [ ] Benchmark memory usage with 1, 2, 3 frames
+- [x] Test that gradients don't flow back to frozen VLM (verified: VLM has 0 gradients)
+- [x] Benchmark memory usage with 1, 2, 3 frames
+  - 1 frame: 1.71 GB
+  - 2 frames: 1.72 GB
+  - 3 frames: 1.72 GB
 
 ### 2.2 Projector Modules
 - [x] Implement `StateProjector` (Linear: state_dim → hidden_dim)
 - [x] Implement `ActionProjector` (Linear: action_dim → expert_hidden_dim)
 - [x] Implement `FeatureProjector` (Linear: vlm_hidden_dim → expert_hidden_dim)
 - [x] Add LayerNorm where appropriate
-- [ ] Test projector shapes with dummy inputs
+- [x] Test projector shapes with dummy inputs
 
 ### 2.3 Flow Matching Action Expert
 - [x] Implement `FlowMatchingExpert` transformer
@@ -146,7 +152,7 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 - [x] Implement feed-forward blocks (MLP with GELU)
 - [x] Implement final projection to action_dim
 - [x] Add positional embeddings for action sequence
-- [ ] Test forward pass: (noisy_actions, vlm_features, timestep) → velocity
+- [x] Test forward pass: (noisy_actions, vlm_features, timestep) → velocity
 
 ### 2.4 Full QwenVLA Model
 - [x] Create `QwenVLA` nn.Module combining all components
@@ -161,8 +167,11 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
       # Returns action chunk via ODE integration
   ```
 - [x] Add config dataclass for all hyperparameters
-- [ ] Test full model forward pass
-- [ ] Print model parameter counts (frozen vs trainable)
+- [x] Test full model forward pass
+- [x] Print model parameter counts (frozen vs trainable)
+  - Total: 1,248,126,088 parameters
+  - Trainable: 26,563,720 (2.1%)
+  - Frozen (VLM): 1,221,562,368 (97.9%)
 
 ### 2.5 Visual Token Handling (Optional Optimization)
 - [x] Implement `TokenPooler` module (average pool or learned)

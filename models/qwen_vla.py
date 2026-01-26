@@ -56,6 +56,16 @@ class QwenVLA(nn.Module):
         )
         self.action_expert = FlowMatchingExpert(config.expert)
 
+    def _ensure_device(self, device: torch.device) -> None:
+        """Move trainable modules to the specified device if needed."""
+        if next(self.feature_projector.parameters()).device != device:
+            self.feature_projector = self.feature_projector.to(device)
+        if next(self.action_expert.parameters()).device != device:
+            self.action_expert = self.action_expert.to(device)
+        if self.state_projector is not None:
+            if next(self.state_projector.parameters()).device != device:
+                self.state_projector = self.state_projector.to(device)
+
     def forward(
         self,
         images: Sequence[Iterable],
@@ -68,6 +78,10 @@ class QwenVLA(nn.Module):
 
         with torch.no_grad():
             temporal_features = self.temporal_encoder(images, text)
+
+        # Ensure all trainable modules are on the same device as features
+        self._ensure_device(temporal_features.device)
+
         features = self.feature_projector(temporal_features)
 
         if self.state_projector is not None and states is not None:
@@ -87,7 +101,8 @@ class QwenVLA(nn.Module):
     ) -> torch.Tensor:
         """Sample action chunk via Euler integration."""
 
-        device = next(self.parameters()).device
+        # Use the VLM's device (the quantized model is on CUDA)
+        device = next(self.qwen_vl.parameters()).device
         batch_size = len(images) if isinstance(images[0], (list, tuple)) else 1
         actions = torch.randn(
             batch_size, self.config.chunk_size, self.config.expert.action_dim, device=device

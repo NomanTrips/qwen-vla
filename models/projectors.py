@@ -12,7 +12,7 @@ from torch import nn
 class ProjectorConfig:
     state_dim: int = 0
     action_dim: int = 0
-    vlm_hidden_dim: int = 1024
+    vlm_hidden_dim: int = 0  # Auto-detected from VLM if 0
     expert_hidden_dim: int = 512
     use_layer_norm: bool = True
 

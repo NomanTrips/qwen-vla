@@ -53,11 +53,20 @@ def _normalize_text_batch(text: str | Sequence[str], batch_size: int) -> List[st
 def _normalize_frame_batch(
     frames: Sequence[Iterable],
 ) -> List[List]:
+    """Normalize frames to batch format: List[List[Image]].
+
+    Input formats:
+    - Single image: image -> [[image]]
+    - List of images (one per sample): [img1, img2] -> [[img1], [img2]]
+    - List of frame lists (batch): [[img1a, img1b], [img2a, img2b]] -> as-is
+    """
     if not frames:
         raise ValueError("frames cannot be empty")
+    # Check if first element is a list/tuple (batch of frame sequences)
     if isinstance(frames[0], (list, tuple)):
         return [list(frame_set) for frame_set in frames]
-    return [list(frames)]
+    # Otherwise, each element is a single image - wrap each in a list
+    return [[frame] for frame in frames]
 
 
 class Qwen3VLFeatureExtractor(nn.Module):
@@ -92,9 +101,27 @@ class Qwen3VLFeatureExtractor(nn.Module):
     ) -> dict:
         frame_batch = _normalize_frame_batch(frames)
         text_batch = _normalize_text_batch(text, len(frame_batch))
+
+        # Build chat messages with proper image placeholders for each sample
+        all_texts = []
+        all_images = []
+        for sample_frames, sample_text in zip(frame_batch, text_batch):
+            # Build content list with images followed by text
+            content = []
+            for frame in sample_frames:
+                content.append({"type": "image", "image": frame})
+            content.append({"type": "text", "text": sample_text})
+
+            messages = [{"role": "user", "content": content}]
+            formatted_text = self.processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=False
+            )
+            all_texts.append(formatted_text)
+            all_images.append(list(sample_frames))
+
         inputs = self.processor(
-            images=frame_batch,
-            text=text_batch,
+            text=all_texts,
+            images=all_images,
             return_tensors="pt",
             padding=True,
         )

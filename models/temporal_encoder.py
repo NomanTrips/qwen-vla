@@ -89,11 +89,16 @@ class TemporalFeatureExtractor(nn.Module):
             with torch.no_grad():
                 features = self.qwen_vl(frame_batch, instruction)
             if self.temporal_embeddings is not None:
+                # Ensure temporal embeddings are on the same device as features
+                if self.temporal_embeddings.weight.device != features.device:
+                    self.temporal_embeddings = self.temporal_embeddings.to(features.device)
                 temporal_embed = self.temporal_embeddings(
                     torch.tensor(frame_index, device=features.device)
                 )
                 features = features + temporal_embed
             if self.token_pooler is not None:
+                # Ensure token pooler is on the same device as features
+                self.token_pooler = self.token_pooler.to(features.device)
                 features = self.token_pooler(features)
             feature_chunks.append(features)
         return torch.cat(feature_chunks, dim=1)
