@@ -187,11 +187,21 @@ def _maybe_init_wandb(config: TrainingConfig):
 
 def _extract_batch(batch: Any) -> Dict[str, Any]:
     if isinstance(batch, Mapping):
+        # Handle text field (string, so 'or' is safe)
+        text = batch.get("text")
+        if text is None:
+            text = batch.get("instruction", "")
+
+        # Handle actions field (tensor, avoid 'or' which checks truthiness)
+        actions = batch.get("actions")
+        if actions is None:
+            actions = batch.get("action_chunk")
+
         return {
             "images": batch["images"],
-            "text": batch.get("text") or batch.get("instruction") or "",
+            "text": text,
             "states": batch.get("states"),
-            "actions": batch.get("actions") or batch.get("action_chunk"),
+            "actions": actions,
         }
     raise ValueError("Batch must be a mapping with images and actions.")
 
@@ -258,6 +268,16 @@ def train(config_path: str | None) -> None:
     writer = SummaryWriter(log_dir=os.path.join(config.training.output_dir, "logs"))
     wandb_run = _maybe_init_wandb(config.training)
 
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Starting training...")
+    print(f"  Total parameters: {total_params:,}")
+    print(f"  Trainable parameters: {trainable_params:,}")
+    print(f"  Dataset size: {len(dataloader.dataset)} samples")
+    print(f"  Batch size: {config.training.batch_size}")
+    print(f"  Total steps: {total_steps}")
+    print(f"  Output dir: {config.training.output_dir}")
+
     model.train()
 
     for epoch in range(start_epoch, config.training.num_epochs):
@@ -304,10 +324,12 @@ def train(config_path: str | None) -> None:
 
             if global_step % config.training.log_every == 0:
                 lr = scheduler.get_last_lr()[0]
-                writer.add_scalar("train/loss", loss.item(), global_step)
+                actual_loss = loss.item() * config.training.grad_accumulation
+                print(f"Step {global_step}: loss={actual_loss:.4f}, lr={lr:.2e}")
+                writer.add_scalar("train/loss", actual_loss, global_step)
                 writer.add_scalar("train/lr", lr, global_step)
                 if wandb_run is not None:
-                    wandb_run.log({"loss": loss.item(), "lr": lr}, step=global_step)
+                    wandb_run.log({"loss": actual_loss, "lr": lr}, step=global_step)
 
             if (global_step + 1) % config.training.save_every == 0:
                 ckpt_path = os.path.join(

@@ -1,0 +1,46 @@
+# Test training config for QwenVLA
+
+model:
+  qwen_vl:
+    model_name: "Qwen/Qwen3-VL-2B-Instruct"
+    load_in_4bit: true
+    target_layer: 14
+  temporal:
+    num_frames: 3
+    add_temporal_embeddings: true
+  projectors:
+    action_dim: 13  # 4 mouse + 3 buttons + 6 keys
+    expert_hidden_dim: 512
+  expert:
+    action_dim: 13
+    hidden_dim: 512
+    num_layers: 6
+    num_heads: 8
+  chunk_size: 50
+
+training:
+  batch_size: 2
+  num_epochs: 1
+  max_steps: 20  # Just a few steps for testing
+  grad_accumulation: 1
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  warmup_steps: 5
+  max_grad_norm: 1.0
+  log_every: 5
+  save_every: 100  # Won't trigger in test
+  output_dir: "checkpoints/test_run"
+  mixed_precision: "bf16"
+  num_workers: 0  # Avoid multiprocessing issues in test
+
+dataset:
+  module: "data.dataset"
+  class_name: "MiniworldVLADataset"
+  kwargs:
+    episode_dirs: "data/processed/ep_0001"
+    num_frames: 3
+    frame_skip: 2
+    chunk_size: 50
+    instruction: "Navigate to the goal."
+  collate_module: "data.dataset"
+  collate_fn: "collate_vla_batch"
