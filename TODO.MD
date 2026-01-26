@@ -194,7 +194,7 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
       # Loss: MSE(v, u)
   ```
 - [x] Add optional loss weighting by timestep
-- [ ] Test loss computation with dummy data
+- [x] Test loss computation with dummy data
 
 ### 3.2 Optimizer and Scheduler
 - [x] Setup AdamW optimizer
@@ -235,123 +235,76 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 
 ---
 
-## 4. Inference Loop
+## 4. Inference
 
-### 4.1 ODE Solver for Sampling
-- [ ] Implement Euler integration for flow matching:
+### 4.1 Simple Inference Script
+- [ ] Create `inference/run_inference.py`:
+  - [ ] Load model from checkpoint
+  - [ ] Load test images/frames
+  - [ ] Run `model.sample()` and print predicted actions
+  - [ ] Verify output shape and value ranges
+- [ ] Test with trained checkpoint
+- [ ] Document inference API usage
+
+### 4.2 Miniworld Integration
+- [ ] Create `inference/miniworld_runner.py`:
+  - [ ] Connect to Miniworld environment
+  - [ ] Capture frames at inference rate
+  - [ ] Convert model outputs to mouse/keyboard actions:
+    - [ ] Denormalize mouse position from [-1,1] to pixel coords
+    - [ ] Threshold button/key outputs to binary
+  - [ ] Execute actions in environment
+- [ ] Implement basic synchronous loop:
   ```python
-  def euler_sample(model, images, text, states, num_steps=10):
-      actions = torch.randn(batch, chunk_size, action_dim)
-      dt = 1.0 / num_steps
-      for t in reversed(linspace(0, 1, num_steps)):
-          velocity = model(images, text, states, actions, t)
-          actions = actions - velocity * dt
-      return actions
-  ```
-- [ ] Implement higher-order solver (optional: RK4, Heun)
-- [ ] Add CFG (classifier-free guidance) support if using conditioning
-- [ ] Benchmark sampling quality vs num_steps
+  frame_buffer = []  # Store last 3 frames
 
-### 4.2 Temporal Feature Caching
-The VLM is the bottleneck. At inference time, cache features to avoid re-encoding old frames.
-
-- [ ] Implement `FeatureCache` class:
-  ```python
-  class FeatureCache:
-      def __init__(self, max_frames=3):
-          self.cache = deque(maxlen=max_frames)
-          self.frame_indices = deque(maxlen=max_frames)
-      
-      def add(self, frame_idx, features):
-          """Add new frame features to cache"""
-          self.cache.append(features)
-          self.frame_indices.append(frame_idx)
-      
-      def get_temporal_features(self):
-          """Return concatenated features for all cached frames"""
-          return torch.cat(list(self.cache), dim=1)
-      
-      def clear(self):
-          """Clear cache at episode boundary"""
-          self.cache.clear()
-          self.frame_indices.clear()
-  ```
-- [ ] Implement cached inference loop:
-  ```python
-  def inference_step(self, new_frame, instruction, cache):
-      # Only encode the NEW frame (not all 3)
-      new_features = self.vlm_encode(new_frame, instruction)
-      cache.add(current_frame_idx, new_features)
-      
-      # Combine with cached features from previous frames
-      temporal_features = cache.get_temporal_features()
-      
-      # Action expert sees all temporal context
-      return self.action_expert.sample(temporal_features)
-  ```
-- [ ] Handle episode start (cache is empty, need to pad or wait)
-- [ ] Add cache warmup strategy (run VLM on first 3 frames before acting)
-- [ ] Benchmark: cached inference should be ~3x faster than full multi-frame forward
-
-### 4.3 Action Execution Interface
-- [ ] Define abstract `ActionExecutor` class
-- [ ] Implement `MiniworldExecutor`:
-  - [ ] Convert normalized actions to mouse/keyboard commands
-  - [ ] Handle action queue (FIFO)
-  - [ ] Implement `step(action)` method
-  - [ ] Implement `get_observation()` method
-- [ ] Add action smoothing/interpolation (optional)
-
-### 4.4 Synchronous Inference Loop
-- [ ] Implement basic inference loop with feature caching:
-  ```python
-  feature_cache = FeatureCache(max_frames=3)
-  
   while not done:
       frame = env.get_observation()
-      
-      # Cache warmup at episode start
-      if len(feature_cache) < 3:
-          features = vlm_encode(frame, instruction)
-          feature_cache.add(frame_idx, features)
-          if len(feature_cache) < 3:
-              continue  # Wait until we have enough temporal context
-      
-      # Normal inference with caching
-      action_chunk = model.sample_with_cache(frame, instruction, feature_cache)
-      
-      for action in action_chunk:
-          env.step(action)
-          frame_idx += 1
+      frame_buffer.append(frame)
+      if len(frame_buffer) > 3:
+          frame_buffer.pop(0)
+
+      if len(frame_buffer) == 3:
+          action_chunk = model.sample([frame_buffer], instruction)
+          for action in action_chunk[0]:
+              execute_action(env, action)
   ```
-- [ ] Add FPS limiting/timing control
-- [ ] Add episode timeout handling
-- [ ] Add success/failure detection (if available from env)
-- [ ] Clear feature cache at episode boundaries
+- [ ] Add episode reset handling
+- [ ] Add basic success/failure logging
 
-### 4.5 Asynchronous Inference Loop (Advanced)
-- [ ] Implement `PolicyServer` class:
-  - [ ] Load model on GPU
-  - [ ] Maintain per-session feature caches
-  - [ ] Accept observations via queue/gRPC
-  - [ ] Return action chunks asynchronously
-- [ ] Implement `RobotClient` class:
-  - [ ] Maintain action queue
-  - [ ] Send observations when queue below threshold
-  - [ ] Execute actions from queue continuously
-- [ ] Implement observation similarity filter (avoid redundant inference)
-- [ ] Add threshold parameter `g` for queue refill trigger
-- [ ] Test async vs sync performance comparison
+### 4.3 Async Action Execution (SmolVLA-style)
+The key idea: execute action chunks while predicting the next chunk in parallel.
 
-### 4.6 Real-time Optimizations
-- [ ] Add torch.compile() for action expert (VLM may not compile well with 4-bit)
-- [ ] Verify 4-bit quantization is active at inference
-- [ ] Profile inference breakdown:
-  - [ ] VLM encoding time (should be ~100-200ms per frame)
-  - [ ] Action expert time (should be ~20-50ms)
-  - [ ] With caching, total should be ~150ms instead of ~400ms
-- [ ] Implement KV cache reuse within VLM if supported
-- [ ] Target latency: <200ms per inference step on RTX 3090
+- [ ] Implement action queue with background inference:
+  ```python
+  action_queue = deque()
+  inference_thread = None
+
+  while not done:
+      # Start new inference when queue is low
+      if len(action_queue) < threshold and inference_thread is None:
+          frames = capture_temporal_frames()
+          inference_thread = start_inference_async(model, frames)
+
+      # Check if inference is done
+      if inference_thread is not None and inference_thread.done():
+          new_actions = inference_thread.result()
+          action_queue.extend(new_actions)
+          inference_thread = None
+
+      # Execute next action from queue
+      if action_queue:
+          action = action_queue.popleft()
+          env.step(action)
+  ```
+- [ ] Use threading or asyncio for parallel execution
+- [ ] Tune queue threshold for smooth execution
+- [ ] Measure latency improvement vs synchronous
+
+### 4.4 Optimizations (Future)
+- [ ] Feature caching (encode only new frames, reuse cached)
+- [ ] torch.compile() for action expert
+- [ ] Profile and optimize bottlenecks
 
 ---
 
