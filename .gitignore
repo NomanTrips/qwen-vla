@@ -1,6 +1,7 @@
 # Training data and processed datasets
 data/processed/
 data/recordings/
+processed_data/
 
 # Raw screen captures (large video files)
 raw_screen_capture/*/video.mp4
@@ -60,6 +61,7 @@ Thumbs.db
 wandb/
 runs/
 outputs/
+videos/
 
 # Temporary files
 *.tmp

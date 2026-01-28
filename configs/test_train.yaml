@@ -41,6 +41,6 @@ dataset:
     num_frames: 3
     frame_skip: 2
     chunk_size: 50
-    instruction: "Navigate to the goal."
+    instruction: "Navigate to find the sign showing a color, then touch the object matching that color."
   collate_module: "data.dataset"
   collate_fn: "collate_vla_batch"

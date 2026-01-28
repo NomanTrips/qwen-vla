@@ -44,6 +44,7 @@ class TrainingConfig:
     max_grad_norm: float = 1.0
     log_every: int = 10
     save_every: int = 1000
+    max_checkpoints: int = 2
     output_dir: str = "checkpoints"
     resume_from: str | None = None
     mixed_precision: str = "bf16"
@@ -51,6 +52,7 @@ class TrainingConfig:
     beta_a: float = 1.0
     beta_b: float = 1.0
     use_wandb: bool = False
+    use_tensorboard: bool = True
     wandb_project: str = "qwen-vla"
     wandb_run_name: str | None = None
     num_workers: int = 4
@@ -175,14 +177,34 @@ def build_optimizer(model: QwenVLA, config: TrainingConfig) -> AdamW:
     return AdamW(param_groups, lr=config.learning_rate, betas=(0.9, 0.999))
 
 
-def _maybe_init_wandb(config: TrainingConfig):
+def _maybe_init_wandb(config: TrainingConfig, model_config: QwenVLAConfig):
     if not config.use_wandb:
         return None
     if importlib.util.find_spec("wandb") is None:
         raise RuntimeError("wandb is enabled but not installed.")
     import wandb
 
-    return wandb.init(project=config.wandb_project, name=config.wandb_run_name)
+    # Build config dict for wandb
+    run_config = {
+        "batch_size": config.batch_size,
+        "num_epochs": config.num_epochs,
+        "max_steps": config.max_steps,
+        "learning_rate": config.learning_rate,
+        "weight_decay": config.weight_decay,
+        "warmup_steps": config.warmup_steps,
+        "grad_accumulation": config.grad_accumulation,
+        "mixed_precision": config.mixed_precision,
+        "chunk_size": model_config.chunk_size,
+        "action_dim": model_config.projectors.action_dim,
+        "expert_hidden_dim": model_config.projectors.expert_hidden_dim,
+        "expert_layers": model_config.expert.num_layers,
+    }
+
+    return wandb.init(
+        project=config.wandb_project,
+        name=config.wandb_run_name,
+        config=run_config,
+    )
 
 
 def _extract_batch(batch: Any) -> Dict[str, Any]:
@@ -226,6 +248,27 @@ def _load_checkpoint(path: str, model: nn.Module, optimizer, scheduler, scaler) 
     return checkpoint
 
 
+def _cleanup_old_checkpoints(output_dir: str, max_checkpoints: int) -> None:
+    """Remove old step checkpoints, keeping only the most recent max_checkpoints."""
+    if max_checkpoints <= 0:
+        return
+    import glob
+    import re
+    pattern = os.path.join(output_dir, "checkpoint_step_*.pt")
+    checkpoints = glob.glob(pattern)
+    # Extract step numbers and sort
+    step_checkpoints = []
+    for ckpt in checkpoints:
+        match = re.search(r"checkpoint_step_(\d+)\.pt$", ckpt)
+        if match:
+            step_checkpoints.append((int(match.group(1)), ckpt))
+    step_checkpoints.sort(key=lambda x: x[0], reverse=True)
+    # Remove old checkpoints beyond max_checkpoints
+    for _, ckpt_path in step_checkpoints[max_checkpoints:]:
+        os.remove(ckpt_path)
+        print(f"Removed old checkpoint: {ckpt_path}")
+
+
 def train(config_path: str | None) -> None:
     config = load_config(config_path)
     if config.dataset is None:
@@ -265,8 +308,10 @@ def train(config_path: str | None) -> None:
 
     os.makedirs(config.training.output_dir, exist_ok=True)
 
-    writer = SummaryWriter(log_dir=os.path.join(config.training.output_dir, "logs"))
-    wandb_run = _maybe_init_wandb(config.training)
+    writer = None
+    if config.training.use_tensorboard:
+        writer = SummaryWriter(log_dir=os.path.join(config.training.output_dir, "logs"))
+    wandb_run = _maybe_init_wandb(config.training, config.model)
 
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
@@ -326,10 +371,16 @@ def train(config_path: str | None) -> None:
                 lr = scheduler.get_last_lr()[0]
                 actual_loss = loss.item() * config.training.grad_accumulation
                 print(f"Step {global_step}: loss={actual_loss:.4f}, lr={lr:.2e}")
-                writer.add_scalar("train/loss", actual_loss, global_step)
-                writer.add_scalar("train/lr", lr, global_step)
+                if writer is not None:
+                    writer.add_scalar("train/loss", actual_loss, global_step)
+                    writer.add_scalar("train/lr", lr, global_step)
                 if wandb_run is not None:
-                    wandb_run.log({"loss": actual_loss, "lr": lr}, step=global_step)
+                    wandb_run.log({
+                        "train/loss": actual_loss,
+                        "train/lr": lr,
+                        "train/epoch": epoch,
+                        "train/best_loss": best_loss,
+                    }, step=global_step)
 
             if (global_step + 1) % config.training.save_every == 0:
                 ckpt_path = os.path.join(
@@ -346,6 +397,9 @@ def train(config_path: str | None) -> None:
                         "best_loss": best_loss,
                     },
                     ckpt_path,
+                )
+                _cleanup_old_checkpoints(
+                    config.training.output_dir, config.training.max_checkpoints
                 )
 
             current_loss = loss.item() * config.training.grad_accumulation
@@ -371,7 +425,8 @@ def train(config_path: str | None) -> None:
         if config.training.max_steps and global_step >= config.training.max_steps:
             break
 
-    writer.close()
+    if writer is not None:
+        writer.close()
     if wandb_run is not None:
         wandb_run.finish()
 

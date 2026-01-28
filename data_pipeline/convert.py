@@ -149,6 +149,9 @@ def derive_frame_actions(
 
     frame_actions: List[FrameAction] = []
     for idx, (timestamp_ms, frame_events) in enumerate(zip(frame_ts_ms, events_per_frame)):
+        # Track which keys got textInput events this frame (momentary presses)
+        text_input_keys = set()
+
         for event in frame_events:
             kind = event.get("kind")
             if kind in {"mousemove", "mouseclick"}:
@@ -161,6 +164,17 @@ def derive_frame_actions(
                 key_state[int(event["vk"])] = 1
             elif kind == "keyup" and "vk" in event:
                 key_state[int(event["vk"])] = 0
+            elif kind == "textInput" and "vk" in event:
+                # textInput events indicate a key was pressed this frame
+                vk = int(event["vk"])
+                if vk in key_state:
+                    text_input_keys.add(vk)
+
+        # For textInput keys, set state to 1 for this frame
+        # (they don't have keyup events, so we treat them as momentary)
+        frame_key_state = key_state.copy()
+        for vk in text_input_keys:
+            frame_key_state[vk] = 1
 
         mouse_dx = mouse_x - prev_mouse_x
         mouse_dy = mouse_y - prev_mouse_y
@@ -175,7 +189,7 @@ def derive_frame_actions(
             mouse_dx=normalize_delta(mouse_dx, meta.canvas_w),
             mouse_dy=normalize_delta(mouse_dy, meta.canvas_h),
             buttons={name: int(button_state[name]) for name in BUTTON_MASKS},
-            key_state=[key_state[vk] for vk in key_vocab],
+            key_state=[frame_key_state[vk] for vk in key_vocab],
             raw_events=list(frame_events),
         )
         frame_actions.append(action)

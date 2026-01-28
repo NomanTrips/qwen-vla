@@ -1,0 +1,55 @@
+# Small overfit training run for QwenVLA
+# Goal: Test if the model can learn from the small dataset
+# Expected duration: 30-60 minutes on RTX 3090
+
+model:
+  qwen_vl:
+    model_name: "Qwen/Qwen3-VL-2B-Instruct"
+    load_in_4bit: true
+    target_layer: 14
+  temporal:
+    num_frames: 3
+    add_temporal_embeddings: true
+  projectors:
+    action_dim: 14  # 4 mouse + 3 buttons + 7 keys
+    expert_hidden_dim: 512
+  expert:
+    action_dim: 14
+    hidden_dim: 512
+    num_layers: 6
+    num_heads: 8
+  chunk_size: 50
+
+training:
+  batch_size: 2
+  num_epochs: 50  # ~1100 steps total with 22 batches/epoch
+  max_steps: 0  # Use epochs instead
+  grad_accumulation: 1
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  warmup_steps: 50  # ~2 epochs warmup
+  max_grad_norm: 1.0
+  log_every: 5  # Log frequently to see progress
+  save_every: 200  # Save checkpoints periodically
+  output_dir: "checkpoints/small_overfit_run"
+  mixed_precision: "bf16"
+
+  # Logging
+  use_wandb: true
+  use_tensorboard: false
+  wandb_project: "qwen-vla"
+  wandb_run_name: "new-data-aligned-prompt-50ep"
+
+  num_workers: 2  # Small dataset, don't need many workers
+
+dataset:
+  module: "data.dataset"
+  class_name: "MiniworldVLADataset"
+  kwargs:
+    episode_dirs: "processed_data/ep_0001"
+    num_frames: 3
+    frame_skip: 2
+    chunk_size: 50
+    instruction: "Navigate to find the sign showing a color, then touch the object matching that color."
+  collate_module: "data.dataset"
+  collate_fn: "collate_vla_batch"

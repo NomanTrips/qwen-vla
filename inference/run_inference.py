@@ -108,14 +108,30 @@ def run_inference(
     model_config: QwenVLAConfig,
     num_steps: int,
 ) -> torch.Tensor:
+    print("Loading model...")
     model = QwenVLA(model_config)
+    print("Loading checkpoint...")
     checkpoint_data = torch.load(checkpoint, map_location="cpu")
     state_dict = checkpoint_data["model"] if isinstance(checkpoint_data, dict) else checkpoint_data
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+
+    # Filter out VLM quantization keys (expected to not match since VLM is re-quantized)
+    # VLM keys can be under qwen_vl. or temporal_encoder.qwen_vl.
+    def is_vlm_key(k: str) -> bool:
+        return "qwen_vl." in k
+
+    vlm_keys = [k for k in state_dict.keys() if is_vlm_key(k)]
+    trainable_state = {k: v for k, v in state_dict.items() if not is_vlm_key(k)}
+
+    missing, unexpected = model.load_state_dict(trainable_state, strict=False)
+    # Filter out expected missing keys (VLM weights that we didn't load)
+    missing = [k for k in missing if not is_vlm_key(k)]
+    unexpected = [k for k in unexpected if not is_vlm_key(k)]
+
     if missing:
         print(f"Warning: missing keys in checkpoint: {missing}")
     if unexpected:
         print(f"Warning: unexpected keys in checkpoint: {unexpected}")
+    print(f"Loaded trainable weights ({len(trainable_state)} keys, skipped {len(vlm_keys)} VLM keys)")
 
     model.eval()
     with torch.no_grad():

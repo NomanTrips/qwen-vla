@@ -238,39 +238,38 @@ With 4-bit quantization and frozen VLM, batch size 8-16 should be feasible.
 ## 4. Inference
 
 ### 4.1 Simple Inference Script
-- [ ] Create `inference/run_inference.py`:
-  - [ ] Load model from checkpoint
-  - [ ] Load test images/frames
-  - [ ] Run `model.sample()` and print predicted actions
-  - [ ] Verify output shape and value ranges
-- [ ] Test with trained checkpoint
+- [x] Create `inference/run_inference.py`:
+  - [x] Load model from checkpoint
+  - [x] Load test images/frames
+  - [x] Run `model.sample()` and print predicted actions
+  - [x] Verify output shape and value ranges
+- [x] Test with trained checkpoint
 - [ ] Document inference API usage
 
 ### 4.2 Miniworld Integration
-- [ ] Create `inference/miniworld_runner.py`:
-  - [ ] Connect to Miniworld environment
-  - [ ] Capture frames at inference rate
-  - [ ] Convert model outputs to mouse/keyboard actions:
-    - [ ] Denormalize mouse position from [-1,1] to pixel coords
-    - [ ] Threshold button/key outputs to binary
-  - [ ] Execute actions in environment
-- [ ] Implement basic synchronous loop:
+- [x] Create `inference/miniworld_runner.py`:
+  - [x] Connect to Miniworld Sign environment
+  - [x] Capture frames at inference rate
+  - [x] Convert model outputs to Miniworld actions:
+    - [x] Map mouse_dx/dy to turn_delta/pitch_delta
+    - [x] Map key states (WASD) to forward_speed/strafe_speed
+    - [x] Threshold button outputs for pickup/drop
+  - [x] Execute actions in environment
+- [x] Implement basic synchronous loop:
   ```python
-  frame_buffer = []  # Store last 3 frames
+  frame_buffer = deque(maxlen=3)  # Store last 3 frames
 
   while not done:
-      frame = env.get_observation()
-      frame_buffer.append(frame)
-      if len(frame_buffer) > 3:
-          frame_buffer.pop(0)
+      frame = env.step(action)["obs"]
+      frame_buffer.append(preprocess(frame))
 
-      if len(frame_buffer) == 3:
-          action_chunk = model.sample([frame_buffer], instruction)
-          for action in action_chunk[0]:
-              execute_action(env, action)
+      action_chunk = model.sample([list(frame_buffer)], instruction)
+      for action in action_chunk[0]:
+          miniworld_action = convert_action(action)
+          obs, reward, done, _, _ = env.step(miniworld_action)
   ```
-- [ ] Add episode reset handling
-- [ ] Add basic success/failure logging
+- [x] Add episode reset handling
+- [x] Add basic success/failure logging
 
 ### 4.3 Async Action Execution (SmolVLA-style)
 The key idea: execute action chunks while predicting the next chunk in parallel.

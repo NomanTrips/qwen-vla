@@ -20,7 +20,7 @@ class MiniworldVLADataset(Dataset):
         num_frames: int = 3,
         frame_skip: int = 2,
         chunk_size: int = 50,
-        instruction: str = "Navigate to the goal.",
+        instruction: str = "Navigate to find the sign showing a color, then touch the object matching that color.",
     ) -> None:
         """Initialize dataset.
 
